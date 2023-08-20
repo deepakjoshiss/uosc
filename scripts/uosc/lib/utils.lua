@@ -213,6 +213,7 @@ end
 ---@return string
 function format_time(seconds, max_seconds)
 	local human = mp.format_time(seconds)
+	if options.time_precision < 0 then return human end
 	if options.time_precision > 0 then
 		local formatted = string.format('%.' .. options.time_precision .. 'f', math.abs(seconds) % 1)
 		human = human .. '.' .. string.sub(formatted, 3)

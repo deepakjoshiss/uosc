@@ -79,7 +79,7 @@ end
 function ass_mt:tooltip(element, value, opts)
 	opts = opts or {}
 	opts.size = opts.size or 16
-	opts.border = options.text_border
+	opts.border = opts.border or options.text_border
 	opts.border_color = bg
 	local offset = opts.offset or opts.size / 2
 	local align_top = opts.responsive == false or element.ay - offset > opts.size * 2
@@ -163,8 +163,11 @@ end
 ---@param opts? {color?: string; opacity?: number; clip?: string; border?: number; border_color?: string;}
 function ass_mt:spinner(x, y, size, opts)
 	opts = opts or {}
-	opts.rotate = (state.render_last_time * 1.75 % 1) * -360
+	opts.rotate = (state.render_last_time * 0.25 % 1) * -360
 	opts.color = opts.color or fg
-	self:icon(x, y, size, 'autorenew', opts)
+	self:icon(x, y, size, 'filter_tilt_shift', opts)
+	opts.opacity = opts.opacity * 0.5
+	opts.color = bg
+	self:icon(x, y, size, 'panorama_fish_eye', opts)
 	request_render()
 end

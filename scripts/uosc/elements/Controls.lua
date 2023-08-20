@@ -18,28 +18,33 @@ function Controls:init()
 	self.controls = {}
 	---@type ControlItem[] Only controls that match current dispositions.
 	self.layout = {}
+	self.hit_slop = 50
 
 	-- Serialize control elements
 	local shorthands = {
-		menu = 'command:menu:script-binding uosc/menu-blurred?Menu',
-		subtitles = 'command:subtitles:script-binding uosc/subtitles#sub>0?Subtitles',
-		audio = 'command:graphic_eq:script-binding uosc/audio#audio>1?Audio',
+		menu = 'command:settings:script-binding uosc/menu-blurred?Menu',
+		subtitles = 'command:closed_caption:script-binding uosc/subtitles#sub>0?Subtitles',
+		audio = 'command:headphones:script-binding uosc/audio#audio>1?Audio',
 		['audio-device'] = 'command:speaker:script-binding uosc/audio-device?Audio device',
 		video = 'command:theaters:script-binding uosc/video#video>1?Video',
-		playlist = 'command:list_alt:script-binding uosc/playlist?Playlist',
+		playlist = 'command:queue_music:script-binding uosc/playlist?Playlist',
 		chapters = 'command:bookmark:script-binding uosc/chapters#chapters>0?Chapters',
 		['editions'] = 'command:bookmarks:script-binding uosc/editions#editions>1?Editions',
 		['stream-quality'] = 'command:high_quality:script-binding uosc/stream-quality?Stream quality',
 		['open-file'] = 'command:file_open:script-binding uosc/open-file?Open file',
-		['items'] = 'command:list_alt:script-binding uosc/items?Playlist/Files',
-		prev = 'command:arrow_back_ios:script-binding uosc/prev?Previous',
-		next = 'command:arrow_forward_ios:script-binding uosc/next?Next',
+		['items'] = 'command:queue_music:script-binding uosc/items?Playlist/Files',
+		prev = 'command:fast_rewind:script-binding uosc/prev?Previous',
+		next = 'command:fast_forward:script-binding uosc/next?Next',
 		first = 'command:first_page:script-binding uosc/first?First',
 		last = 'command:last_page:script-binding uosc/last?Last',
 		['loop-playlist'] = 'cycle:repeat:loop-playlist:no/inf!?Loop playlist',
 		['loop-file'] = 'cycle:repeat_one:loop-file:no/inf!?Loop file',
 		shuffle = 'toggle:shuffle:shuffle?Shuffle',
 		fullscreen = 'cycle:crop_free:fullscreen:no/yes=fullscreen_exit!?Fullscreen',
+		play = 'cycle:pause_circle:pause:no/yes=play_circle?',
+		seekf = 'command:forward_10:script-binding uosc/prev?Previous',
+		seekb = 'command:replay_10:script-binding uosc/prev?Previous',
+
 	}
 
 	-- Parse out disposition/config pairs
@@ -63,6 +68,16 @@ function Controls:init()
 	-- Create controls
 	self.controls = {}
 	for i, item in ipairs(items) do
+		local is_center = false
+		local extra_scale = false
+		if item.disposition == 'center' then
+			item.disposition = ''
+			is_center = true
+		elseif item.disposition == 'center_big' then
+			item.disposition = ''
+			is_center = true
+			extra_scale = true
+		end
 		local config = shorthands[item.config] and shorthands[item.config] or item.config
 		local config_tooltip = split(config, ' *%? *')
 		local tooltip = t(config_tooltip[2])
@@ -111,7 +126,7 @@ function Controls:init()
 					tooltip = tooltip,
 					count_prop = 'sub',
 				})
-				table_assign(control, {element = element, sizing = 'static', scale = 1, ratio = 1})
+				table_assign(control, {element = element, sizing = 'static', scale = extra_scale and 1.5 or 1, ratio = 1})
 				if badge then self:register_badge_updater(badge, element) end
 			end
 		elseif kind == 'cycle' then
@@ -138,7 +153,7 @@ function Controls:init()
 				local element = CycleButton:new('control_' .. i, {
 					prop = params[2], anchor_id = 'controls', states = states, tooltip = tooltip,
 				})
-				table_assign(control, {element = element, sizing = 'static', scale = 1, ratio = 1})
+				table_assign(control, {element = element, sizing = 'static', scale = extra_scale and 1.6 or 1, ratio = 1})
 				if badge then self:register_badge_updater(badge, element) end
 			end
 		elseif kind == 'speed' then
@@ -154,6 +169,8 @@ function Controls:init()
 			msg.error('unknown element kind "' .. kind .. '"')
 			break
 		end
+		
+		if is_center then control.sizing = 'center' end
 
 		self.controls[#self.controls + 1] = control
 	end
@@ -213,26 +230,27 @@ function Controls:register_badge_updater(badge, element)
 	else mp.observe_property(observable_name, 'native', handler) end
 end
 
-function Controls:get_visibility()
-	return (Elements.speed and Elements.speed.dragging) and 1 or Elements.timeline:get_is_hovered()
-		and -1 or Element.get_visibility(self)
-end
+-- function Controls:get_visibility()
+-- 	return (Elements.speed and Elements.speed.dragging) and 1 or Elements.timeline:get_is_hovered()
+-- 		and -1 or Element.get_visibility(self)
+-- end
 
 function Controls:update_dimensions()
 	local window_border = Elements.window_border.size
 	local size = state.fullormaxed and options.controls_size_fullscreen or options.controls_size
-	local spacing = options.controls_spacing
-	local margin = options.controls_margin
+	local spacing = (state.fullormaxed and 1.5 or 1) * options.controls_spacing
+	local margin = (state.fullormaxed and 1.5 or 1) * options.controls_margin
 
 	-- Disable when not enough space
 	local available_space = display.height - Elements.window_border.size * 2
 	if Elements.top_bar.enabled then available_space = available_space - Elements.top_bar.size end
 	if Elements.timeline.enabled then available_space = available_space - Elements.timeline.size_max end
 	self.enabled = available_space > size + 10
-
+	local center_count = 0
 	-- Reset hide/enabled flags
 	for c, control in ipairs(self.layout) do
 		control.hide = false
+		if control.sizing == 'center' then center_count = center_count + 1 end
 		if control.element then control.element.enabled = self.enabled end
 	end
 
@@ -240,14 +258,15 @@ function Controls:update_dimensions()
 
 	-- Container
 	self.bx = display.width - window_border - margin
-	self.by = (Elements.timeline.enabled and Elements.timeline.ay or display.height - window_border) - margin
+	self.by = (display.height - window_border) - margin
 	self.ax, self.ay = window_border + margin, self.by - size
 
 	-- Controls
 	local available_width = self.bx - self.ax
-	local statics_width = (#self.layout - 1) * spacing
+	local statics_width = (#self.layout - 1 - center_count) * spacing
 	local min_content_width = statics_width
 	local max_dynamics_width, dynamic_units, spaces = 0, 0, 0
+	local center_width = 0
 
 	-- Calculate statics_width, min_content_width, and count spaces
 	for c, control in ipairs(self.layout) do
@@ -261,6 +280,9 @@ function Controls:update_dimensions()
 			min_content_width = min_content_width + size * control.scale * control.ratio_min
 			max_dynamics_width = max_dynamics_width + size * control.scale * control.ratio
 			dynamic_units = dynamic_units + control.scale * control.ratio
+		elseif control.sizing == 'center' then
+			if center_width > 0 then center_width = center_width + spacing end
+			center_width = center_width + (size * control.scale * control.ratio)
 		end
 	end
 
@@ -293,6 +315,7 @@ function Controls:update_dimensions()
 	local current_x = self.ax
 	local width_for_dynamics = available_width - statics_width
 	local space_width = (width_for_dynamics - max_dynamics_width) / spaces
+	local center_start = round((self.bx + self.ax - center_width) / 2)
 
 	for c, control in ipairs(self.layout) do
 		if not control.hide then
@@ -309,10 +332,19 @@ function Controls:update_dimensions()
 				width = max_dynamics_width < width_for_dynamics
 					and height * ratio or width_for_dynamics * ((scale * ratio) / dynamic_units)
 			end
-
-			local bx = current_x + width
-			if element then element:set_coordinates(round(current_x), round(self.by - height), bx, self.by) end
-			current_x = bx + spacing
+			
+			if sizing == 'center' then
+				height = size * scale
+				width = height * ratio
+				local ay = self.ay - round((height - (self.by - self.ay)) / 2)
+				if element then element:set_coordinates(center_start, ay, center_start + width, round(ay + height)) end
+				if scale > 1.5 then element.font_size = height * 0.9 end
+				center_start = center_start + width + spacing
+			else
+				local bx = current_x + width
+				if element then element:set_coordinates(round(current_x), round(self.by - height), bx, self.by) end
+				current_x = bx + spacing
+			end
 		end
 	end
 

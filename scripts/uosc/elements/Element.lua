@@ -1,4 +1,4 @@
----@alias ElementProps {enabled?: boolean; ax?: number; ay?: number; bx?: number; by?: number; ignores_menu?: boolean; anchor_id?: string;}
+---@alias ElementProps {enabled?: boolean; ax?: number; ay?: number; bx?: number; by?: number; ignores_menu?: boolean; anchor_id?: string; hit_slop?: number;}
 
 -- Base class all elements inherit from.
 ---@class Element : Class
@@ -61,7 +61,11 @@ function Element:update_proximity()
 		self:reset_proximity()
 	else
 		local range = options.proximity_out - options.proximity_in
-		self.proximity_raw = get_point_to_rectangle_proximity(cursor, self)
+		local rect = self
+		if self.hit_slop and self.hit_slop > 0 then 
+			rect = {ax = rect.ax - self.hit_slop, ay = rect.ay - self.hit_slop, bx = rect.bx + self.hit_slop , by = rect.by + self.hit_slop} 
+		end
+		self.proximity_raw = get_point_to_rectangle_proximity(cursor, rect)
 		self.proximity = 1 - (clamp(0, self.proximity_raw - options.proximity_in, range) / range)
 	end
 end

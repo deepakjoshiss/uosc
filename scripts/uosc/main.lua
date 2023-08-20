@@ -953,6 +953,11 @@ for _, loader in ipairs(track_loaders) do
 		)
 	end)
 end
+
+bind_command('playpause', function()
+	mp.commandv('cycle', 'pause')
+end)
+
 bind_command('subtitles', create_select_tracklist_type_menu_opener(
 	t('Subtitles'), 'sub', 'sid', 'script-binding uosc/load-subtitles'
 ))
@@ -1283,10 +1288,12 @@ mp.register_script_message('overwrite-binding', function(name, command) key_bind
 --[[ ELEMENTS ]]
 
 require('elements/WindowBorder'):new()
+require('elements/BottomBar'):new()
 require('elements/BufferingIndicator'):new()
 require('elements/PauseIndicator'):new()
 require('elements/TopBar'):new()
 require('elements/Timeline'):new()
 if options.controls and options.controls ~= 'never' then require('elements/Controls'):new() end
 if itable_index_of({'left', 'right'}, options.volume) then require('elements/Volume'):new() end
+--require('elements/PlayButton'):new() -- removed as it is done with controls
 require('elements/Curtain'):new()

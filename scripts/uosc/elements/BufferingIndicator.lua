@@ -28,8 +28,8 @@ function BufferingIndicator:on_prop_cache_underrun() self:decide_enabled() end
 function BufferingIndicator:render()
 	local ass = assdraw.ass_new()
 	ass:rect(0, 0, display.width, display.height, {color = bg, opacity = 0.3})
-	local size = round(30 + math.min(display.width, display.height) / 10)
-	local opacity = (Elements.menu and not Elements.menu.is_closing) and 0.3 or 0.8
+	local size = round(20 + math.min(display.width, display.height) / 10)
+	local opacity = (Elements.menu and not Elements.menu.is_closing) and 0.2 or 0.4
 	ass:spinner(display.width / 2, display.height / 2, size, {color = fg, opacity = opacity})
 	return ass
 end

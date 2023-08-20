@@ -11,18 +11,24 @@ function Button:new(id, props) return Class.new(self, id, props) --[[@as Button]
 ---@param id string
 ---@param props ButtonProps
 function Button:init(id, props)
+	Element.init(self, id, props)
 	self.icon = props.icon
 	self.active = props.active
 	self.tooltip = props.tooltip
 	self.badge = props.badge
 	self.foreground = props.foreground or fg
 	self.background = props.background or bg
+	self.size = 32
 	---@type fun()
 	self.on_click = props.on_click
-	Element.init(self, id, props)
+	self.t_opt = {size = 12, border = 1.5}
 end
 
-function Button:on_coordinates() self.font_size = round((self.by - self.ay) * 0.7) end
+function Button:on_coordinates() 
+	self.font_size = round((self.by - self.ay) * 0.7) 
+	self.size = self.bx - self.ax
+end
+
 function Button:handle_cursor_down()
 	-- We delay the callback to next tick, otherwise we are risking race
 	-- conditions as we are in the middle of event dispatching.
@@ -47,13 +53,13 @@ function Button:render()
 	-- Background
 	if is_hover_or_active then
 		ass:rect(self.ax, self.ay, self.bx, self.by, {
-			color = self.active and background or foreground, radius = 2,
+			color = self.active and background or foreground, radius = self.size and self.size / 2 or 2,
 			opacity = visibility * (self.active and 1 or 0.3),
 		})
 	end
 
 	-- Tooltip on hover
-	if is_hover and self.tooltip then ass:tooltip(self, self.tooltip) end
+	if is_hover and self.tooltip then ass:tooltip(self, self.tooltip, self.t_opt) end
 
 	-- Badge
 	local icon_clip

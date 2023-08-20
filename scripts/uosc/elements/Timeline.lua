@@ -41,7 +41,7 @@ function Timeline:get_effective_size_min()
 end
 
 function Timeline:get_effective_size()
-	if Elements.speed and Elements.speed.dragging then return self.size_max end
+	if (Elements.speed and Elements.speed.dragging) or self.anim_fade then return self.size_max end
 	local size_min = self:get_effective_size_min()
 	return size_min + math.ceil((self.size_max - size_min) * self:get_visibility())
 end
@@ -56,19 +56,34 @@ function Timeline:update_dimensions()
 	if state.fullormaxed then
 		self.size_min = options.timeline_size_min_fullscreen
 		self.size_max = options.timeline_size_max_fullscreen
+		self.margin_bottom = options.controls_size_fullscreen + options.controls_margin + 42
+		self.margin_horz = options.controls_margin * 1.5
+		self.font_size = 13
 	else
 		self.size_min = options.timeline_size_min
 		self.size_max = options.timeline_size_max
+		self.margin_bottom = options.controls_size + options.controls_margin + 28
+		self.margin_horz = options.controls_margin
+		self.font_size = 13
 	end
-	self.font_size = math.floor(math.min((self.size_max + 60) * 0.2, self.size_max * 0.96) * options.font_scale)
-	self.ax = Elements.window_border.size
-	self.ay = display.height - Elements.window_border.size - self.size_max - self.top_border
-	self.bx = display.width - Elements.window_border.size
-	self.by = display.height - Elements.window_border.size
+
+	self.anim_fade = self.size_min < 0
+	if self.anim_fade then 
+		self.size_min = 0
+	end
+
+	--self.font_size = math.floor(math.min((self.size_max + 60) * 0.2, math.max(self.size_max * 0.96, 14)) * options.font_scale)
+	self.ax = Elements.window_border.size + self.margin_horz
+	self.ay = display.height - Elements.window_border.size - self.size_max - self.top_border - self.margin_bottom
+	self.bx = display.width - Elements.window_border.size - self.margin_horz
+	self.by = display.height - Elements.window_border.size - self.margin_bottom
 	self.width = self.bx - self.ax
 	self.chapter_size = math.max((self.by - self.ay) / 10, 3)
 	self.chapter_size_hover = self.chapter_size * 2
-
+	
+	local add_height = 30 - (self.by - self.ay)
+	self.hit_slop = add_height > 0 and round(add_height / 2) or 0
+	
 	-- Disable if not enough space
 	local available_space = display.height - Elements.window_border.size * 2
 	if Elements.top_bar.enabled then available_space = available_space - Elements.top_bar.size end
@@ -139,11 +154,12 @@ function Timeline:handle_wheel_down() mp.commandv('seek', -options.timeline_step
 
 function Timeline:render()
 	if self.size_max == 0 then return end
-
+	local visibility = self:get_visibility()
+	if visibility == 0 then return end
 	local size_min = self:get_effective_size_min()
 	local size = self:get_effective_size()
-	local visibility = self:get_visibility()
 	self.is_hovered = false
+	local tl_opacity = self.anim_fade and (options.timeline_opacity * visibility) or options.timeline_opacity
 
 	if size < 1 then
 		if self.has_thumbnail then self:clear_thumbnail() end
@@ -166,7 +182,7 @@ function Timeline:render()
 	-- Text opacity rapidly drops to 0 just before it starts overflowing, or before it reaches timeline.size_min
 	local hide_text_below = math.max(self.font_size * 0.8, size_min * 2)
 	local hide_text_ramp = hide_text_below / 2
-	local text_opacity = clamp(0, size - hide_text_below, hide_text_ramp) / hide_text_ramp
+	local text_opacity = 0.9 * tl_opacity --clamp(0, size - hide_text_below, hide_text_ramp) / hide_text_ramp
 
 	local spacing = math.max(math.floor((self.size_max - self.font_size) / 2.5), 4)
 	local progress = state.time / state.duration
@@ -175,7 +191,7 @@ function Timeline:render()
 	-- Foreground & Background bar coordinates
 	local bax, bay, bbx, bby = self.ax, self.by - size - self.top_border, self.bx, self.by
 	local fax, fay, fbx, fby = 0, bay + self.top_border, 0, bby
-	local fcy = fay + (size / 2)
+	local fcy = fby + self.font_size
 
 	local line_width = 0
 
@@ -209,8 +225,8 @@ function Timeline:render()
 	-- Background
 	ass:new_event()
 	ass:pos(0, 0)
-	ass:append('{\\rDefault\\an7\\blur0\\bord0\\1c&H' .. bg .. '}')
-	ass:opacity(options.timeline_opacity)
+	ass:append('{\\rDefault\\an7\\blur0\\bord0\\1c&H' .. fg .. '}')
+	ass:opacity(tl_opacity * 0.5)
 	ass:draw_start()
 	ass:rect_cw(bax, bay, fax, bby) --left of progress
 	ass:rect_cw(fbx, bay, bbx, bby) --right of progress
@@ -218,13 +234,13 @@ function Timeline:render()
 	ass:draw_stop()
 
 	-- Progress
-	ass:rect(fax, fay, fbx, fby, {opacity = options.timeline_opacity})
+	ass:rect(fax, fay, fbx, fby, {opacity = tl_opacity})
 
 	-- Uncached ranges
 	local buffered_playtime = nil
 	if state.uncached_ranges then
-		local opts = {size = 80, anchor_y = fby}
-		local texture_char = visibility > 0 and 'b' or 'a'
+		local opts = {size = 30, anchor_y = fby}
+		local texture_char = visibility > 0 and 'z' or 'a'
 		local offset = opts.size / (visibility > 0 and 24 or 28)
 		for _, range in ipairs(state.uncached_ranges) do
 			if not buffered_playtime and (range[1] > state.time or range[2] > state.time) then
@@ -233,10 +249,11 @@ function Timeline:render()
 			if options.timeline_cache then
 				local ax = range[1] < 0.5 and bax or math.floor(t2x(range[1]))
 				local bx = range[2] > state.duration - 0.5 and bbx or math.ceil(t2x(range[2]))
-				opts.color, opts.opacity, opts.anchor_x = 'ffffff', 0.4 - (0.2 * visibility), bax
-				ass:texture(ax, fay, bx, fby, texture_char, opts)
-				opts.color, opts.opacity, opts.anchor_x = '000000', 0.6 - (0.2 * visibility), bax + offset
-				ass:texture(ax, fay, bx, fby, texture_char, opts)
+				-- opts.color, opts.opacity, opts.anchor_x = 'ffffff', 0.4 - (0.2 * visibility), bax
+				-- ass:texture(ax, fay, bx, fby, texture_char, opts)
+				-- opts.color, opts.opacity, opts.anchor_x = '000000', 0.6 - (0.2 * visibility), bax + offset
+				-- ass:texture(ax, fay, bx, fby, texture_char, opts)
+				ass:rect(ax, fay, bx, fby, {opacity = tl_opacity * 0.4, color= '000033'})
 			end
 		end
 	end
@@ -246,25 +263,26 @@ function Timeline:render()
 		local rax = chapter_range.start < 0.1 and bax or t2x(chapter_range.start)
 		local rbx = chapter_range['end'] > state.duration - 0.1 and bbx
 			or t2x(math.min(chapter_range['end'], state.duration))
-		ass:rect(rax, fay, rbx, fby, {color = chapter_range.color, opacity = chapter_range.opacity})
+		ass:rect(rax, fay, rbx, fby, {color = chapter_range.color, opacity = tl_opacity * chapter_range.opacity})
 	end
 
 	-- Chapters
 	local hovered_chapter = nil
-	if (options.timeline_chapters_opacity > 0
+	local chapter_opacity = tl_opacity * options.timeline_chapters_opacity
+	if (chapter_opacity > 0
 		and (#state.chapters > 0 or state.ab_loop_a or state.ab_loop_b)
 		) then
 		local diamond_radius = foreground_size < 3 and foreground_size or self.chapter_size
 		local diamond_radius_hovered = diamond_radius * 2
-		local diamond_border = options.timeline_border and math.max(options.timeline_border, 1) or 1
-
+		local diamond_border = 1 --options.timeline_border and math.max(options.timeline_border, 1) or 1
+		local ch_alpha = opacity_to_alpha(chapter_opacity)
 		if diamond_radius > 0 then
 			local function draw_chapter(time, radius)
 				local chapter_x, chapter_y = t2x(time), fay - 1
 				ass:new_event()
 				ass:append(string.format(
-					'{\\pos(0,0)\\rDefault\\an7\\blur0\\yshad0.01\\bord%f\\1c&H%s\\3c&H%s\\4c&H%s\\1a&H%X&\\3a&H00&\\4a&H00&}',
-					diamond_border, fg, bg, bg, opacity_to_alpha(options.timeline_opacity * options.timeline_chapters_opacity)
+					'{\\pos(0,0)\\rDefault\\an7\\blur0\\yshad0\\bord%f\\1c&H%s\\3c&H%s\\4c&H%s\\1a&H%X&\\3a&H%X&\\4a&H00&}',
+					diamond_border, fg, bg, bg, ch_alpha, ch_alpha
 				))
 				ass:draw_start()
 				ass:move_to(chapter_x - radius, chapter_y)
@@ -310,8 +328,8 @@ function Timeline:render()
 				local x = t2x(time)
 				ass:new_event()
 				ass:append(string.format(
-					'{\\pos(0,0)\\rDefault\\an7\\blur0\\yshad0.01\\bord%f\\1c&H%s\\3c&H%s\\4c&H%s\\1a&H%X&\\3a&H00&\\4a&H00&}',
-					diamond_border, fg, bg, bg, opacity_to_alpha(options.timeline_opacity * options.timeline_chapters_opacity)
+					'{\\pos(0,0)\\rDefault\\an7\\blur0\\yshad0\\bord%f\\1c&H%s\\3c&H%s\\4c&H%s\\1a&H%X&\\3a&H%X&\\4a&H00&}',
+					diamond_border, fg, bg, bg, ch_alpha, ch_alpha
 				))
 				ass:draw_start()
 				ass:move_to(x, fby - ab_radius)
@@ -338,12 +356,12 @@ function Timeline:render()
 
 	-- Time values
 	if text_opacity > 0 then
-		local time_opts = {size = self.font_size, opacity = text_opacity, border = 2}
+		local time_opts = {size = self.font_size, opacity = text_opacity}
 		-- Upcoming cache time
 		if buffered_playtime and options.buffered_time_threshold > 0
 			and buffered_playtime < options.buffered_time_threshold then
 			local x, align = fbx + 5, 4
-			local cache_opts = {size = self.font_size * 0.8, opacity = text_opacity * 0.6, border = 1}
+			local cache_opts = {size = self.font_size * 0.85, opacity = text_opacity * 0.9}
 			local human = round(math.max(buffered_playtime, 0)) .. 's'
 			local width = text_width(human, cache_opts)
 			local time_width = timestamp_width(state.time_human, time_opts)
@@ -414,7 +432,7 @@ function Timeline:render()
 			local _, chapter = itable_find(state.chapters, function(c) return hovered_seconds >= c.time end, #state.chapters, 1)
 			if chapter and not chapter.is_end_only then
 				ass:tooltip(tooltip_anchor, chapter.title_wrapped, {
-					size = self.font_size, offset = 10, responsive = false, bold = true,
+					size = self.font_size, offset = 10, responsive = false, bold = true, border = 1.5,
 					width_overwrite = chapter.title_wrapped_width * self.font_size,
 				})
 			end
